@@ -1,11 +1,11 @@
 RMQ is a lightweight wrapper over RabbitMQ for Go with support for automatic reconnection, retrays and a handy API for sending messages with or without waiting for a reply.
 Features
 
-🔄 Automatic reconnection: RMQ automatically reconnects on failures
-🔁 Retrays on sending: Configurable number of retries to send messages
-📤 Event sending: Send messages without waiting for a response
-📥 RPC-style requests: Sending messages with response pending
-⏱️ Timeout management: Customisable timeouts for different operations
+🔄 Automatic reconnection: RMQ automatically reconnects on failures<br>
+🔁 Retrays on sending: Configurable number of retries to send messages<br>
+📤 Event sending: Send messages without waiting for a response<br>
+📥 RPC-style requests: Sending messages with response pending<br>
+⏱️ Timeout management: Customisable timeouts for different operations<br>
 🧩 Simple and clear API: Fluent interface for configuration
 
 **Install**
