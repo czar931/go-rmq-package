@@ -60,15 +60,33 @@ func main() {
 
 ```
 routes := map[string]func([]byte) ([]byte, error){
-    "user.get": func(body []byte) ([]byte, error) {
-        var request map[string]interface{}
-        if err := rmq.DecodeMsg(body, &request); err != nil {
-            return nil, err
-        }
-        
-        // Обработка запроса...
-        
-        return rmq.EncodeMsg(map[string]interface{}{
-            "status": "success",
-            "data": map[
-                ```
+    "user.get":    handleUserGet,
+    "user.update": handleUserUpdate,
+    "user.delete": handleUserDelete,
+    "user.list":   handleUserList,
+    "auth.login":  handleAuthLogin,
+}
+```
+
+
+**Example of a route handler**
+```
+func handleUserGet(body []byte) ([]byte, error) {
+	var request UserRequest
+	if err := json.Unmarshal(body, &request); err != nil {
+		return createErrorResponse("invalid_request", "Failed to parse request")
+	}
+
+	log.Printf("Handling user.get for user %d", request.UserID)
+
+	...
+	userData := map[string]interface{}{
+		"id":       request.UserID,
+		"username": fmt.Sprintf("user_%d", request.UserID),
+		"email":    fmt.Sprintf("user%d@example.com", request.UserID),
+		"role":     "user",
+	}
+
+	return createSuccessResponse("User information retrieved", userData)
+}
+```
