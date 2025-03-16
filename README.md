@@ -6,6 +6,7 @@ Features
 📤 Event sending: Send messages without waiting for a response
 📥 RPC-style requests: Sending messages with response pending
 ⏱️ Timeout management: Customisable timeouts for different operations
+🧩 Simple and clear API: Fluent interface for configuration
 
 **Install**
 
@@ -24,6 +25,7 @@ func main() {
     config.Password = "guest"
     config.Exchange = "my_exchange"
     config.Queue = "my_queue"
+    consgi.Port = "5672" // Optional
     
     // Connecting to RabbitMQ
     if !rmqService.Connect(config) {
@@ -54,6 +56,17 @@ func main() {
         log.Printf("Received response: %v", response)
     }
 }
+```
+
+**Configuration with Fluent API**
+
+```
+config := rmq.NewDefaultConfig().
+    WithExchange("my_exchange").
+    WithQueue("my_queue").
+    WithPrefetchCount(10).
+    WithRetrySettings(5, time.Second).
+    WithTimeouts(time.Second*10, time.Second*5)
 ```
 
 **Configuring route handlers**

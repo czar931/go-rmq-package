@@ -49,26 +49,21 @@ func (s *RMQService) Connect(config RMQConfig) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Применяем настройки по умолчанию
 	config = applyDefaultConfig(config)
 	s.configs = config
 
-	// Устанавливаем соединение
 	if !s.connectInternal() {
 		return false
 	}
 
-	// Настраиваем мониторинг состояния соединения
 	go s.monitorConnection()
 
 	return true
 }
 
-// connectInternal выполняет внутреннее подключение к RabbitMQ
 func (s *RMQService) connectInternal() bool {
-	// Формируем строку подключения
-	connectionString := fmt.Sprintf("amqp://%s:%s@%s:5672",
-		s.configs.Login, s.configs.Password, s.configs.Host)
+	connectionString := fmt.Sprintf("amqp://%s:%s@%s:",
+		s.configs.Login, s.configs.Password, s.configs.Host, s.configs.Port)
 
 	conn, err := amqp.Dial(connectionString)
 	if err != nil {
@@ -91,7 +86,6 @@ func (s *RMQService) connectInternal() bool {
 	s.chClosed = make(chan *amqp.Error)
 	s.ch.NotifyClose(s.chClosed)
 
-	// Устанавливаем QoS
 	err = ch.Qos(
 		s.configs.PrefetchCount,
 		0,
@@ -104,7 +98,6 @@ func (s *RMQService) connectInternal() bool {
 		return false
 	}
 
-	// Объявляем обмен, если он указан
 	if s.configs.Exchange != "" {
 		err = s.ch.ExchangeDeclare(
 			s.configs.Exchange,
@@ -123,7 +116,6 @@ func (s *RMQService) connectInternal() bool {
 		}
 	}
 
-	// Настраиваем очередь для ответов
 	err = s.setupReplyQueue()
 	if err != nil {
 		log.Printf("Failed to setup reply queue: %v", err)
@@ -132,7 +124,6 @@ func (s *RMQService) connectInternal() bool {
 		return false
 	}
 
-	// Если указана основная очередь, объявляем ее и привязываем к маршрутам
 	if s.configs.Queue != "" {
 		_, err = ch.QueueDeclare(
 			s.configs.Queue,
@@ -149,7 +140,6 @@ func (s *RMQService) connectInternal() bool {
 			return false
 		}
 
-		// Привязываем очередь к каждому маршруту
 		for path := range s.configs.Routes {
 			err = ch.QueueBind(s.configs.Queue, path, s.configs.Exchange, false, nil)
 			if err != nil {
@@ -166,8 +156,6 @@ func (s *RMQService) connectInternal() bool {
 	return true
 }
 
-// monitorConnection отслеживает состояние соединения и канала
-// и выполняет повторное подключение при необходимости
 func (s *RMQService) monitorConnection() {
 	for {
 		select {
@@ -194,7 +182,6 @@ func (s *RMQService) monitorConnection() {
 	}
 }
 
-// reconnect выполняет повторное подключение к RabbitMQ
 func (s *RMQService) reconnect() {
 	s.mu.Lock()
 	defer func() {
@@ -202,7 +189,6 @@ func (s *RMQService) reconnect() {
 		s.mu.Unlock()
 	}()
 
-	// Закрываем существующие соединения, если они есть
 	if s.ch != nil {
 		s.ch.Close()
 	}
@@ -211,7 +197,6 @@ func (s *RMQService) reconnect() {
 		s.conn.Close()
 	}
 
-	// Повторные попытки подключения
 	for attempt := 1; attempt <= s.configs.MaxRetryAttempts; attempt++ {
 		log.Printf("Reconnection attempt %d/%d", attempt, s.configs.MaxRetryAttempts)
 
@@ -219,22 +204,20 @@ func (s *RMQService) reconnect() {
 			return
 		}
 
-		// Ждем перед следующей попыткой
 		time.Sleep(s.configs.ReconnectDelay)
 	}
 
 	log.Printf("Failed to reconnect after %d attempts", s.configs.MaxRetryAttempts)
 }
 
-// setupReplyQueue настраивает очередь для получения ответов
 func (s *RMQService) setupReplyQueue() error {
 	q, err := s.ch.QueueDeclare(
-		"",    // пустое имя = автоматически сгенерированное
-		false, // не durable
-		true,  // автоудаление
-		true,  // эксклюзивная
-		false, // no-wait
-		nil,   // аргументы
+		"",
+		false,
+		true,
+		true,
+		false,
+		nil,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to declare reply queue: %w", err)
@@ -242,39 +225,34 @@ func (s *RMQService) setupReplyQueue() error {
 
 	s.replyQueue = q
 
-	// Устанавливаем потребителя для ответов
 	msgs, err := s.ch.Consume(
-		q.Name, // имя очереди
-		"",     // потребитель
-		true,   // auto-ack
-		false,  // эксклюзивный
-		false,  // no-local
-		false,  // no-wait
-		nil,    // аргументы
+		q.Name,
+		"",
+		true,
+		false,
+		false,
+		false,
+		nil,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to register a consumer on reply queue: %w", err)
 	}
 
-	// Обрабатываем входящие ответы
 	go func() {
 		for msg := range msgs {
 			respChanValue, ok := s.correlationMap.LoadAndDelete(msg.CorrelationId)
 			if ok {
 				respChan := respChanValue.(chan Response)
 
-				// Создаем объект ответа
 				resp := Response{
 					Body:    msg.Body,
 					Headers: msg.Headers,
 				}
 
-				// Проверяем наличие ошибки в заголовках
 				if errMsg, exists := msg.Headers["-x-error"]; exists {
 					resp.Error = fmt.Errorf("%v", errMsg)
 				}
 
-				// Отправляем ответ
 				respChan <- resp
 			}
 		}
@@ -283,7 +261,6 @@ func (s *RMQService) setupReplyQueue() error {
 	return nil
 }
 
-// Disconnect закрывает соединение с RabbitMQ
 func (s *RMQService) Disconnect() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -305,7 +282,6 @@ func (s *RMQService) Disconnect() {
 	log.Println("Disconnected from RabbitMQ")
 }
 
-// Listen начинает слушать сообщения из очереди
 func (s *RMQService) Listen() {
 	s.mu.Lock()
 	if !s.connected || s.configs.Queue == "" {
@@ -315,20 +291,18 @@ func (s *RMQService) Listen() {
 	}
 	s.mu.Unlock()
 
-	// Функция для установки потребителя
 	setupConsumer := func() (<-chan amqp.Delivery, error) {
 		return s.ch.Consume(
-			s.configs.Queue, // имя очереди
-			"",              // потребитель
-			false,           // не auto-ack, будем подтверждать вручную
-			false,           // не эксклюзивный
-			false,           // no-local
-			false,           // no-wait
-			nil,             // аргументы
+			s.configs.Queue,
+			"",
+			false,
+			false,
+			false,
+			false,
+			nil,
 		)
 	}
 
-	// Первоначальная настройка потребителя
 	msgs, err := setupConsumer()
 	if err != nil {
 		log.Printf("Failed to register a consumer: %v", err)
@@ -337,11 +311,9 @@ func (s *RMQService) Listen() {
 
 	log.Printf("[*] Awaiting RPC requests on queue: %s", s.configs.Queue)
 
-	// Флаг для отслеживания состояния и канал для сигнализации о переподключении
 	consumerActive := true
 	reconnectCh := make(chan bool)
 
-	// Слушаем сигналы о необходимости переподключить потребителя
 	go func() {
 		for {
 			select {
@@ -354,19 +326,16 @@ func (s *RMQService) Listen() {
 					continue
 				}
 
-				// Пытаемся установить нового потребителя
 				newMsgs, err := setupConsumer()
 				if err != nil {
 					log.Printf("Failed to re-register consumer: %v", err)
 					s.mu.Unlock()
 
-					// Ждем перед повторной попыткой
 					time.Sleep(s.configs.ReconnectDelay)
 					reconnectCh <- true
 					continue
 				}
 
-				// Обновляем канал сообщений
 				msgs = newMsgs
 				consumerActive = true
 				s.mu.Unlock()
@@ -376,7 +345,6 @@ func (s *RMQService) Listen() {
 		}
 	}()
 
-	// Обрабатываем входящие сообщения
 	go func() {
 		for {
 			select {
@@ -392,7 +360,6 @@ func (s *RMQService) Listen() {
 					continue
 				}
 
-				// Проверяем наличие обработчика для маршрута
 				handler, exists := s.configs.Routes[msg.RoutingKey]
 				if !exists {
 					log.Printf("No handler for routing key: %s", msg.RoutingKey)
@@ -400,10 +367,8 @@ func (s *RMQService) Listen() {
 					continue
 				}
 
-				// Обрабатываем сообщение
 				resp, err := handler(msg.Body)
 
-				// Подготавливаем заголовки для ответа
 				headers := make(amqp.Table)
 				if err != nil {
 					headers["-x-error"] = err.Error()
@@ -412,15 +377,14 @@ func (s *RMQService) Listen() {
 					headers["done"] = "ok"
 				}
 
-				// Если указан ReplyTo, отправляем ответ
 				if msg.ReplyTo != "" {
 					s.mu.Lock()
 					if s.connected {
 						err = s.ch.Publish(
-							"",          // exchange
-							msg.ReplyTo, // routing key
-							false,       // mandatory
-							false,       // immediate
+							"",
+							msg.ReplyTo,
+							false,
+							false,
 							amqp.Publishing{
 								ContentType:   "text/json",
 								CorrelationId: msg.CorrelationId,
@@ -434,14 +398,10 @@ func (s *RMQService) Listen() {
 					}
 					s.mu.Unlock()
 				}
-
-				// Подтверждаем обработку сообщения
 				msg.Ack(false)
 			}
 		}
 	}()
-
-	// Блокируемся до получения сигнала завершения
 	<-s.exitCh
 }
 
@@ -454,13 +414,11 @@ func (s *RMQService) PublishEvent(topic string, message interface{}) error {
 	}
 	s.mu.Unlock()
 
-	// Кодируем сообщение в JSON
 	msgBytes, err := EncodeMsg(message)
 	if err != nil {
 		return fmt.Errorf("failed to encode message: %w", err)
 	}
 
-	// Пытаемся отправить сообщение с повторами при неудаче
 	var lastErr error
 	for attempt := 0; attempt < s.configs.MaxRetryAttempts; attempt++ {
 		s.mu.Lock()
@@ -468,32 +426,29 @@ func (s *RMQService) PublishEvent(topic string, message interface{}) error {
 			s.mu.Unlock()
 			lastErr = fmt.Errorf("connection lost")
 
-			// Ждем перед повтором
 			time.Sleep(s.configs.RetryDelay)
 			continue
 		}
 
 		err = s.ch.Publish(
-			s.configs.Exchange, // exchange
-			topic,              // routing key
-			false,              // mandatory
-			false,              // immediate
+			s.configs.Exchange,
+			topic,
+			false,
+			false,
 			amqp.Publishing{
 				ContentType: "text/json",
 				Body:        msgBytes,
-				// Не указываем ReplyTo и CorrelationId, так как ответ не нужен
 			})
 		s.mu.Unlock()
 
 		if err == nil {
-			return nil // Успешно отправлено
+			return nil
 		}
 
 		lastErr = err
 		log.Printf("Failed to publish event (attempt %d/%d): %v",
 			attempt+1, s.configs.MaxRetryAttempts, err)
 
-		// Если это не последняя попытка, ждем перед повтором
 		if attempt < s.configs.MaxRetryAttempts-1 {
 			time.Sleep(s.configs.RetryDelay)
 		}
@@ -503,7 +458,6 @@ func (s *RMQService) PublishEvent(topic string, message interface{}) error {
 		s.configs.MaxRetryAttempts, lastErr)
 }
 
-// SendWithResponse отправляет сообщение и ожидает ответа
 func (s *RMQService) SendWithResponse(ctx context.Context, topic string, message interface{}, result interface{}) error {
 	s.mu.Lock()
 	if !s.connected {
@@ -512,28 +466,22 @@ func (s *RMQService) SendWithResponse(ctx context.Context, topic string, message
 	}
 	s.mu.Unlock()
 
-	// Кодируем сообщение в JSON
 	msgBytes, err := EncodeMsg(message)
 	if err != nil {
 		return fmt.Errorf("failed to encode message: %w", err)
 	}
 
-	// Создаем уникальный идентификатор корреляции
 	correlationId := generateCorrelationID()
 
-	// Канал для получения ответа
 	respChan := make(chan Response, 1)
 
-	// Сохраняем канал в карте корреляции
 	s.correlationMap.Store(correlationId, respChan)
 
-	// Функция очистки, которая выполняется в конце
 	defer func() {
 		s.correlationMap.Delete(correlationId)
 		close(respChan)
 	}()
 
-	// Пытаемся отправить сообщение с повторами при неудаче
 	var lastErr error
 	for attempt := 0; attempt < s.configs.MaxRetryAttempts; attempt++ {
 		s.mu.Lock()
@@ -541,16 +489,15 @@ func (s *RMQService) SendWithResponse(ctx context.Context, topic string, message
 			s.mu.Unlock()
 			lastErr = fmt.Errorf("connection lost")
 
-			// Ждем перед повтором
 			time.Sleep(s.configs.RetryDelay)
 			continue
 		}
 
 		err = s.ch.Publish(
-			s.configs.Exchange, // exchange
-			topic,              // routing key
-			false,              // mandatory
-			false,              // immediate
+			s.configs.Exchange,
+			topic,
+			false,
+			false,
 			amqp.Publishing{
 				ContentType:   "text/json",
 				Body:          msgBytes,
@@ -560,32 +507,28 @@ func (s *RMQService) SendWithResponse(ctx context.Context, topic string, message
 		s.mu.Unlock()
 
 		if err == nil {
-			break // Успешно отправлено
+			break
 		}
 
 		lastErr = err
 		log.Printf("Failed to publish message (attempt %d/%d): %v",
 			attempt+1, s.configs.MaxRetryAttempts, err)
 
-		// Если это последняя попытка, возвращаем ошибку
 		if attempt == s.configs.MaxRetryAttempts-1 {
 			return fmt.Errorf("failed to publish message after %d attempts: %w",
 				s.configs.MaxRetryAttempts, lastErr)
 		}
 
-		// Ждем перед повтором
 		time.Sleep(s.configs.RetryDelay)
 	}
 
-	// Ожидаем ответа с контекстом и таймаутом
 	select {
 	case resp := <-respChan:
-		// Проверяем на ошибку в ответе
+
 		if resp.Error != nil {
 			return fmt.Errorf("error from server: %w", resp.Error)
 		}
 
-		// Декодируем ответ, если указан результат
 		if result != nil {
 			err := DecodeMsg(resp.Body, result)
 			if err != nil {
