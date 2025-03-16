@@ -14,6 +14,10 @@ Features
 
 **Quick start**
 ```
+import (
+    "github.com/czar931/go-rmq-package/rmq"
+)
+
 func main() {
     // Create an instance of RMQ service
     rmqService := rmq.NewRMQService()
