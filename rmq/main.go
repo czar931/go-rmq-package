@@ -62,7 +62,7 @@ func (s *RMQService) Connect(config RMQConfig) bool {
 }
 
 func (s *RMQService) connectInternal() bool {
-	connectionString := fmt.Sprintf("amqp://%s:%s@%s:",
+	connectionString := fmt.Sprintf("amqp://%s:%s@%s:%s",
 		s.configs.Login, s.configs.Password, s.configs.Host, s.configs.Port)
 
 	conn, err := amqp.Dial(connectionString)
