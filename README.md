@@ -10,7 +10,7 @@ Features
 
 **Install**
 
-```go get github.com/yourusername/rmq```
+```go get github.com/czar931/go-rmq-package```
 
 **Quick start**
 ```
