@@ -1,0 +1,55 @@
+name: Go Test with RabbitMQ
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+
+    services:
+      rabbitmq:
+        image: rabbitmq:3-management
+        ports:
+          - 5672:5672
+          - 15672:15672
+        options: >-
+          --health-cmd "rabbitmqctl node_health_check"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.23.5'
+
+    - name: Check out code
+      uses: actions/checkout@v4
+
+    - name: Get dependencies
+      run: go mod download
+
+    - name: Update go.mod
+      run: go mod tidy
+
+    - name: Test with coverage
+      run: go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
+      env:
+        RMQ_HOST: localhost
+        RMQ_USER: guest
+        RMQ_PASSWORD: guest
+        RMQ_PORT: 5672
+        RMQ_EXCHANGE: test_exchange_${{ github.run_id }}
+        RMQ_QUEUE: test_queue_${{ github.run_id }}
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.txt
+        fail_ci_if_error: false
