@@ -35,7 +35,7 @@ var DefaultConfig = RMQConfig{
 	RetryDelay:       time.Second * 2,
 }
 
-// applyDefaultConfig применяет настройки по умолчанию, если они не указаны
+// Applies default settings if they are not specified
 func applyDefaultConfig(config RMQConfig) RMQConfig {
 	if config.PrefetchCount == 0 {
 		config.PrefetchCount = DefaultConfig.PrefetchCount

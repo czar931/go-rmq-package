@@ -10,18 +10,14 @@ import (
 	"github.com/streadway/amqp"
 )
 
-// RMQ интерфейс для работы с RabbitMQ
 type RMQ interface {
 	Connect(config RMQConfig) bool
 	Disconnect()
 	Listen()
-	// Отправка сообщения без ожидания ответа
 	PublishEvent(topic string, message interface{}) error
-	// Отправка сообщения с ожиданием ответа
 	SendWithResponse(ctx context.Context, topic string, message interface{}, result interface{}) error
 }
 
-// RMQService реализация интерфейса RMQ
 type RMQService struct {
 	conn           *amqp.Connection
 	connClosed     chan *amqp.Error
@@ -36,7 +32,6 @@ type RMQService struct {
 	reconnecting   bool
 }
 
-// NewRMQService создает новый экземпляр RMQService
 func NewRMQService() *RMQService {
 	return &RMQService{
 		exitCh:    make(chan bool),
@@ -44,7 +39,6 @@ func NewRMQService() *RMQService {
 	}
 }
 
-// Connect устанавливает соединение с RabbitMQ
 func (s *RMQService) Connect(config RMQConfig) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -405,7 +399,7 @@ func (s *RMQService) Listen() {
 	<-s.exitCh
 }
 
-// PublishEvent отправляет событие без ожидания ответа
+// Sends an event without waiting for a response
 func (s *RMQService) PublishEvent(topic string, message interface{}) error {
 	s.mu.Lock()
 	if !s.connected {
@@ -458,6 +452,7 @@ func (s *RMQService) PublishEvent(topic string, message interface{}) error {
 		s.configs.MaxRetryAttempts, lastErr)
 }
 
+// Sends an event with a pending response
 func (s *RMQService) SendWithResponse(ctx context.Context, topic string, message interface{}, result interface{}) error {
 	s.mu.Lock()
 	if !s.connected {

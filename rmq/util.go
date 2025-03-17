@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// EncodeMsg преобразует объект в JSON байты
+// Converts the object into JSON bytes
 func EncodeMsg(msg interface{}) ([]byte, error) {
 	reply, err := json.Marshal(msg)
 	if err != nil {
@@ -17,7 +17,7 @@ func EncodeMsg(msg interface{}) ([]byte, error) {
 	return reply, nil
 }
 
-// DecodeMsg декодирует JSON байты в указанный объект
+// Decodes JSON bytes into the specified object
 func DecodeMsg(body []byte, v interface{}) error {
 	err := json.Unmarshal(body, v)
 	if err != nil {
@@ -26,24 +26,11 @@ func DecodeMsg(body []byte, v interface{}) error {
 	return nil
 }
 
-// Старый вариант DecodeMsg с использованием дженериков
-// оставлен для обратной совместимости
-func DecodeMsg2[T any](body []byte) (T, error) {
-	var msg T
-	err := json.Unmarshal(body, &msg)
-	if err != nil {
-		return msg, fmt.Errorf("failed to unmarshal JSON: %w", err)
-	}
-	return msg, nil
-}
-
-// generateCorrelationID создает уникальный идентификатор для корреляции запросов
+// Creates a unique identifier to correlate queries
 func generateCorrelationID() string {
-	// Создаем случайную строку из 32 символов
 	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 	const length = 32
 
-	// Инициализируем генератор случайных чисел с текущим временем
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 
 	b := make([]byte, length)
@@ -54,14 +41,14 @@ func generateCorrelationID() string {
 	return string(b)
 }
 
-// logError логирует ошибку, если она не равна nil
+// Logs the error if it is not equal to nil
 func logError(err error, msg string) {
 	if err != nil {
 		log.Printf("%s: %v", msg, err)
 	}
 }
 
-// failOnError вызывает панику, если ошибка не равна nil
+// Causes panic if the error is not equal to nil
 func failOnError(err error, msg string) {
 	if err != nil {
 		log.Fatalf("%s: %s", msg, err)
@@ -69,16 +56,14 @@ func failOnError(err error, msg string) {
 	}
 }
 
-// mergeStringMaps объединяет два отображения строк
+// Combines two string mappings
 func mergeStringMaps(m1, m2 map[string]string) map[string]string {
 	result := make(map[string]string)
 
-	// Копируем все значения из первого отображения
 	for k, v := range m1 {
 		result[k] = v
 	}
 
-	// Добавляем или заменяем значения из второго отображения
 	for k, v := range m2 {
 		result[k] = v
 	}
@@ -86,7 +71,7 @@ func mergeStringMaps(m1, m2 map[string]string) map[string]string {
 	return result
 }
 
-// retry выполняет функцию с повторными попытками
+// Executes the function with retries
 func retry(attempts int, delay time.Duration, fn func() error) error {
 	var err error
 
@@ -105,16 +90,14 @@ func retry(attempts int, delay time.Duration, fn func() error) error {
 	return fmt.Errorf("failed after %d attempts: %w", attempts, err)
 }
 
-// waitWithTimeout ожидает завершения функции или истечения таймаута
+// Waits for the function to complete or for the timeout to expire
 func waitWithTimeout(timeout time.Duration, fn func() error) error {
 	result := make(chan error, 1)
 
-	// Запускаем функцию в отдельной горутине
 	go func() {
 		result <- fn()
 	}()
 
-	// Ожидаем результат или таймаут
 	select {
 	case err := <-result:
 		return err
@@ -123,7 +106,7 @@ func waitWithTimeout(timeout time.Duration, fn func() error) error {
 	}
 }
 
-// createHeadersTable создает таблицу заголовков AMQP из отображения строк
+// Creates an AMQP header table from a mapping of rows
 func createHeadersTable(headers map[string]string) map[string]interface{} {
 	result := make(map[string]interface{})
 	for k, v := range headers {
@@ -132,7 +115,7 @@ func createHeadersTable(headers map[string]string) map[string]interface{} {
 	return result
 }
 
-// extractErrorFromHeaders извлекает сообщение об ошибке из заголовков
+// Extracts the error message from the headers
 func extractErrorFromHeaders(headers map[string]interface{}) error {
 	if errMsg, exists := headers["-x-error"]; exists {
 		return fmt.Errorf("%v", errMsg)
